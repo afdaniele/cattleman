@@ -1,0 +1,13 @@
+{
+    "$schema": "../../../include/cattleman/schemas/1.0/fragment.json",
+    "services": [
+        {
+            "group": "service:abcdef02",
+            "port": {
+                "internal": 8080,
+                "external": 80,
+                "protocol": "tcp"
+            }
+        }
+    ]
+}

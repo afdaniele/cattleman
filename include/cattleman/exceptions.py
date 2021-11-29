@@ -1,0 +1,39 @@
+from typing import Any, Union
+
+
+class CattlemanException(RuntimeError):
+
+    def __init__(self, msg: str):
+        super(RuntimeError, self).__init__(msg)
+
+
+class ResourceNotFoundException(CattlemanException):
+
+    def __init__(self, resource_id: str):
+        msg = f"Resource with ID '{resource_id}' not found."
+        super(ResourceNotFoundException, self).__init__(msg)
+
+
+class DatabaseNotFoundException(CattlemanException):
+
+    def __init__(self, name: str):
+        msg = f"Database with name '{name}' not found."
+        super(DatabaseNotFoundException, self).__init__(msg)
+
+
+class TypeMismatchException(CattlemanException):
+
+    def __init__(self, expected: Union[str, type], received: object):
+        # sanitize expected
+        if isinstance(expected, type):
+            expected = expected.__name__
+        if not isinstance(expected, str):
+            expected = type(expected).__name__
+        # sanitice received
+        if isinstance(received, type):
+            received = received.__name__
+        received = type(received).__name__
+        # ---
+        msg = f"Expected type '{expected}', an object of type '{received}' was received instead."
+        super(TypeMismatchException, self).__init__(msg)
+

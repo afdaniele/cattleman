@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "properties": {
+        "services": {
+            "type": "array",
+            "description": "A list of services to expose (or retire)",
+            "items": {
+                "$ref": "service.json"
+            }
+        },
+        "applications": {
+            "type": "array",
+            "description": "A list of applications"
+        },
+        "retire": {
+            "type": "array",
+            "description": "List of IDs of resources to retire",
+            "items": {
+                "$ref": "id.json"
+            }
+        }
+    }
+}

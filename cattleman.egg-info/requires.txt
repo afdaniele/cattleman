@@ -1,0 +1,7 @@
+docker>=4.4.0
+requests
+jsonschema
+termcolor
+sshconf
+cryptography
+dataclasses

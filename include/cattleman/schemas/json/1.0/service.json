@@ -1,0 +1,40 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "properties": {
+        "application": {
+            "$ref": "id.json"
+        },
+        "port": {
+            "type": "object",
+            "properties": {
+                "internal": {
+                    "$ref": "port.json"
+                },
+                "external": {
+                    "$ref": "port.json"
+                },
+                "protocol": {
+                    "type": "string",
+                    "enum": [
+                        "tcp",
+                        "udp"
+                    ]
+                }
+            },
+            "required": [
+                "internal",
+                "external",
+                "protocol"
+            ],
+            "additionalProperties": false
+        },
+        "dns": {
+            "$ref": "dns_record.json"
+        }
+    },
+    "required": [
+        "application",
+        "port"
+    ]
+}

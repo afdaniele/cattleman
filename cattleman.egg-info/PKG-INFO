@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: cattleman
+Version: 0.0.1
+Summary: TODO: DESCRIPTION_HERE
+Home-page: https://github.com/afdaniele/cattleman
+Author: Andrea F. Daniele
+Author-email: afdaniele@ttic.edu
+License: MIT
+Download-URL: https://github.com/afdaniele/cattleman/tarball/0.0.1
+Keywords: TODO,code,container,containerization,package,toolkit,docker
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Build Tools
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+License-File: LICENSE
+
+UNKNOWN
+
