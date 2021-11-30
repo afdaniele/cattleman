@@ -7,6 +7,8 @@ DATABASES_DIR = os.path.join(USER_DATA_DIR, "databases")
 
 DATABASE_SCHEMA_VERSION = "1.0"
 
+UNDEFINED = object()
+
 CANONICAL_ARCH = {
     "arm": "arm32v7",
     "arm32v7": "arm32v7",

@@ -4,12 +4,17 @@ from typing import Union, Any, Tuple, Type, Iterable
 
 from dateutil import tz
 
+from cattleman.constants import UNDEFINED
 from cattleman.exceptions import TypeMismatchException
 from cpk.constants import CANONICAL_ARCH
 
 
 def now() -> datetime:
     return datetime.now(tz=tz.tzlocal())
+
+
+def is_undefined(value: Any) -> bool:
+    return id(value) is UNDEFINED
 
 
 def run_cmd(cmd):
