@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import sys
-import tempfile
 import unittest
 
 ROOT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..")

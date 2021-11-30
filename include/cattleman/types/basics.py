@@ -1,9 +1,10 @@
+import copy
 import sqlite3
 import uuid
 from abc import abstractmethod, ABC
 from datetime import datetime
 from enum import Enum, IntEnum
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Any, Optional
 
 import cbor2
 import dataclasses
@@ -73,9 +74,26 @@ class TransportProtocol(Enum):
 
 class Status(Enum):
     SETUP = "setup"
+    WAITING = "waiting"
     ERROR = "error"
     TIMEOUT = "timeout"
     READY = "ready"
+    TERMINATED = "terminated"
+
+
+@dataclasses.dataclass
+class ResourceStatus(Serializable):
+    description: str
+    reason: str
+    value: Status
+    date: datetime = dataclasses.field(default_factory=now)
+
+    def serialize(self):
+        return copy.copy(self.__dict__)
+
+    @classmethod
+    def deserialize(cls, data):
+        return ResourceStatus(**data)
 
 
 @dataclasses.dataclass
@@ -110,11 +128,20 @@ class Resource:
     id: ResourceID
     name: str
     description: str
+    status: List[Status]
 
     def __post_init__(self):
         assert_type(self.id, ResourceID)
         assert_type(self.name, str)
         assert_type(self.description, str, nullable=True)
+        assert_type(self.status, list)
+
+    @staticmethod
+    def defaults() -> dict:
+
+        return {
+            "status": []
+        }
 
 
 @dataclasses.dataclass
@@ -124,9 +151,21 @@ class PersistentResource(Resource):
     def _sql_table(self) -> str:
         pass
 
+    # @classmethod
+    # @abstractmethod
+    # def _from_dict(cls, data: dict) -> 'PersistentResource':
+    #     pass
+
     @classmethod
-    @abstractmethod
-    def _from_dict(cls, data: dict) -> 'PersistentResource':
+    def _from_dict(cls, data: dict) -> 'Resource':
+        return super(cls).__init__(**data)
+
+    def _log_event(self, event: str):
+        # TODO: implement this
+        pass
+
+    def _log_update(self, field: str, current: Any, new: Any, reason: Optional[str] = None):
+        # TODO: implement this
         pass
 
     def _commit(self):
@@ -140,22 +179,36 @@ class PersistentResource(Resource):
             query = f"INSERT INTO {table}(id, date, enabled, value) VALUES (?, ?, ?, ?)"
             cursor.execute(query, self.id, now(), True, data)
 
+    @staticmethod
+    def _serialize_value(value):
+        # unpack enums
+        if isinstance(value, Enum):
+            value = value.value
+        # serializable elements
+        if isinstance(value, Serializable):
+            value = value.serialize()
+        # iterables
+        if isinstance(value, (list, set, tuple)):
+            iterable = type(value)
+            value = iterable([PersistentResource._serialize_value(v) for v in value])
+        # ---
+        return value
+
     def serialize(self) -> bytes:
         data = {}
         for field in dataclasses.fields(self):
             field_value = getattr(self, field.name)
-            # unpack enums
-            if isinstance(field_value, Enum):
-                field_value = field_value.value
-            # serializable elements
-            if isinstance(field_value, Serializable):
-                field_value = field_value.serialize()
-            # ---
-            data[field.name] = field_value
+            data[field.name] = self._serialize_value(field_value)
         return cbor2.dumps(data)
 
     @classmethod
     def deserialize(cls, data: bytes) -> Resource:
+        print(super())
+        print(cls.__base__)
+        data = cbor2.loads(data)
+        obj = cls(**data)
+
+        return cls(**data)
         return cls._from_dict(cbor2.loads(data))
 
 
@@ -360,19 +413,21 @@ class IService(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class INode(PersistentResource, ABC):
-    _ip: ResourceID
+    _ip_addresses: List[ResourceID]
     _cluster: ResourceID
     _pods: List[ResourceID] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
-        assert_type(self._ip, ResourceID)
+        assert_type(self._ip_addresses, list)
         assert_type(self._cluster, ResourceID)
         assert_type(self._pods, list)
         super(INode, self).__post_init__()
 
     @property
-    def ip(self) -> 'IIPAddress':
-        return KnowledgeBase.get(self._ip)
+    def ip_addresses(self) -> List['IIPAddress']:
+        return [
+            KnowledgeBase.get(ip) for ip in self._ip_addresses
+        ]
 
     @property
     def cluster(self) -> 'ICluster':

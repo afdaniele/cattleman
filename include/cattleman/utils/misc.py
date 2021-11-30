@@ -1,6 +1,6 @@
 import subprocess
 from datetime import datetime
-from typing import Union, Any
+from typing import Union, Any, Tuple, Type, Iterable
 
 from dateutil import tz
 
@@ -85,7 +85,7 @@ def ask_confirmation(logger, message, default="y", question="Do you confirm?", c
                 return r
 
 
-def assert_type(value: Any, klass: type, nullable: bool = False):
+def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool = False):
     if value is None and nullable:
         return
     if not isinstance(value, klass):
