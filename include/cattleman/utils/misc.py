@@ -110,28 +110,32 @@ def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool =
                 field: Optional[str] = None):
     if value is None and nullable:
         return
+
+
     # typing
     # noinspection PyProtectedMember,PyUnresolvedReferences
-    if isinstance(klass, typing._GenericAlias):
-        print(klass)
-        print(value)
-        print(field)
+    # if isinstance(klass, typing._GenericAlias):
+    #     print(klass)
+    #     print(value)
+    #     print(field)
+    #
+    #     container = klass.__dict__["__origin__"]
+    #     content = klass.__dict__["__args__"]
+    #
+    #     if container is typing.Union:
+    #         if type(None) in content and value is None:
+    #             return
+    #         for ctype in content:
+    #             if isclass(ctype) and isinstance(value, ctype):
+    #                 return
+    #         TypeMismatchException(klass, value, field=field)
+    #     if not isinstance(value, container):
+    #         raise TypeMismatchException(container, value, field=field)
+    #     if container in [list, set, tuple]:
+    #         for i, elem in enumerate(value):
+    #             assert_type(elem, content[0], field=f"{field}[{i}]")
+    # else:
 
-        container = klass.__dict__["__origin__"]
-        content = klass.__dict__["__args__"]
 
-        if container is typing.Union:
-            if type(None) in content and value is None:
-                return
-            for ctype in content:
-                if isclass(ctype) and isinstance(value, ctype):
-                    return
-            TypeMismatchException(klass, value, field=field)
-        if not isinstance(value, container):
-            raise TypeMismatchException(container, value, field=field)
-        if container in [list, set, tuple]:
-            for i, elem in enumerate(value):
-                assert_type(elem, content[0], field=f"{field}[{i}]")
-    else:
-        if not isinstance(value, klass):
-            raise TypeMismatchException(klass, value, field=field)
+    if not isinstance(value, klass):
+        raise TypeMismatchException(klass, value, field=field)

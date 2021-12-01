@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 from abc import abstractmethod, ABC
 from builtins import setattr
+from collections import Iterable
 from datetime import datetime
 from enum import Enum, IntEnum
 from inspect import isclass
@@ -156,7 +157,7 @@ class Resource(Serializable, ABC):
 
 
 @dataclasses.dataclass
-class PersistentResource(Resource):
+class PersistentResource(Resource, ABC):
 
     @abstractmethod
     def _sql_table(self) -> str:
@@ -200,30 +201,25 @@ class PersistentResource(Resource):
         return value
 
     @staticmethod
-    def _deserialize_value(value: Any, type: type):
+    def _deserialize_value(value: Any, klass: type):
         try:
-            assert_type(value, type)
+            assert_type(value, klass)
             return value
         except TypeMismatchException:
             pass
-        # iterables
-        if typing_type(type) in (list, set, tuple):
-            iterable = typing_type(type)
-            content_type = typing_content_type(type)
-            return iterable([PersistentResource._deserialize_value(v, content_type) for v in value])
-
-        # if not isclass(type):
-        #     return value
-        print(type)
         # pack enums
-        if issubclass(type, Enum):
-            value = type(value)
+        if issubclass(klass, Enum):
+            value = klass(value)
         # serializable elements
-        if issubclass(type, Serializable) and not isinstance(value, type):
-            value = type.deserialize(value)
-        # # dictionary
-        # if isinstance(value, dict):
-        #     value = {k: PersistentResource._serialize_value(v) for k, v in value.items()}
+        if issubclass(klass, Serializable) and not isinstance(value, klass):
+            value = klass.deserialize(value)
+        # iterables
+        if isinstance(value, Iterable):
+            iterable = type(value)
+            value = iterable([PersistentResource._deserialize_value(v, klass) for v in value])
+        # dictionary
+        if isinstance(value, dict):
+            value = {k: PersistentResource._deserialize_value(v, klass) for k, v in value.items()}
         # ---
         return value
 
@@ -236,26 +232,30 @@ class PersistentResource(Resource):
 
     @classmethod
     def deserialize(cls, data: bytes) -> Resource:
-        # print(super())
-        # print(cls.__base__)
-        data = cbor2.loads(data)
+        pass
 
-        print(data)
-
-        values = {}
-        for field in dataclasses.fields(cls):
-            print(field)
-            field_value = data[field.name]
-            values[field.name] = PersistentResource._deserialize_value(field_value, field.type)
-            # setattr(obj, field.name, obj._deserialize_value(field_value, field.type))
-
-        print(values)
-
-        obj = cls(**values)
-        return obj
-
-        return cls(**data)
-        return cls._from_dict(cbor2.loads(data))
+    # @classmethod
+    # def deserialize(cls, data: bytes) -> Resource:
+    #     # print(super())
+    #     # print(cls.__base__)
+    #     data = cbor2.loads(data)
+    #
+    #     print(data)
+    #
+    #     values = {}
+    #     for field in dataclasses.fields(cls):
+    #         print(field)
+    #         field_value = data[field.name]
+    #         values[field.name] = PersistentResource._deserialize_value(field_value, field.type)
+    #         # setattr(obj, field.name, obj._deserialize_value(field_value, field.type))
+    #
+    #     print(values)
+    #
+    #     obj = cls(**values)
+    #     return obj
+    #
+    #     return cls(**data)
+    #     return cls._from_dict(cbor2.loads(data))
 
 
 # Persistent resources
