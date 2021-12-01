@@ -5,11 +5,13 @@ import sys
 import cattleman
 from cattleman.exceptions import CattlemanException
 
-from cattleman.cli.logger import cmlogger
+from cattleman.logger import cmlogger
 from cattleman.cli.commands.info import CLIInfoCommand
+from cattleman.cli.commands.manager import CLIManagerCommand
 
 _supported_commands = {
     'info': CLIInfoCommand,
+    'manager': CLIManagerCommand,
 }
 
 

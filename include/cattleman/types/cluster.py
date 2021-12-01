@@ -1,12 +1,15 @@
-from typing import Optional
+from typing import Optional, List
 
 import cbor2
 
-from .basics import ICluster, ResourceID, Resource, ResourceStatus, Status, INode
+from .basics import ICluster, ResourceID, Resource, ResourceStatus, Status, INode, ResourceType
 from ..utils.misc import assert_type
 
 
 class Cluster(ICluster):
+
+    def nodes(self) -> List[INode]:
+        query = "SELECT * FROM relations WHERE origin=? AND relation=? AND "
 
     @staticmethod
     def make(name: str, *, description: Optional[str] = None) -> 'Cluster':
@@ -15,15 +18,9 @@ class Cluster(ICluster):
         assert_type(description, str, nullable=True)
         # ---
         cluster = Cluster(
-            id=ResourceID.make("cluster"),
+            id=ResourceID.make(ResourceType.CLUSTER),
             name=name,
-            description=description,
-            status=[
-                ResourceStatus(
-                    key="created",
-                    value=Status.SUCCESS
-                )
-            ]
+            description=description
         )
         cluster.commit()
         return cluster
@@ -33,5 +30,4 @@ class Cluster(ICluster):
         data = cbor2.loads(data)
         return Cluster(
             **Resource.parse(data),
-            _nodes=[ResourceID.deserialize(s) for s in data['_nodes']],
         )

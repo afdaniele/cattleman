@@ -2,7 +2,7 @@ from typing import Optional, List
 
 import cbor2
 
-from .basics import INode, ResourceID, IIPAddress, ICluster, Resource
+from .basics import INode, ResourceID, IIPAddress, ICluster, Resource, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -17,7 +17,7 @@ class Node(INode):
         assert_type(description, str, nullable=True)
         # ---
         node = Node(
-            id=ResourceID.make("node"),
+            id=ResourceID.make(ResourceType.NODE),
             name=name,
             description=description,
             _ip_addresses=list(map(lambda ip: ip.id, ip_addresses)),

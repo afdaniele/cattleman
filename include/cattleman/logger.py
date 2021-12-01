@@ -59,7 +59,7 @@ def add_coloring_to_emit_ansi(fn, indent: int = 0):
 
 
 format_indent = 15
-setup_logging_format("%(name)3s|%(levelname)8s : %(message)s")
+setup_logging_format("%(name)12s|%(levelname)8s : %(message)s")
 if DEBUG:
     format_indent = 44
     setup_logging_format("%(name)3s|%(filename)15s:%(lineno)-4s - %(funcName)-15s| %(message)s")

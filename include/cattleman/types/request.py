@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IRequest, Resource, Fragment
+from .basics import ResourceID, IRequest, Resource, Fragment, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -16,7 +16,7 @@ class Request(IRequest):
         assert_type(description, str, nullable=True)
         # ---
         request = Request(
-            id=ResourceID.make("request"),
+            id=ResourceID.make(ResourceType.REQUEST),
             name=name,
             description=description,
             _fragment=fragment,

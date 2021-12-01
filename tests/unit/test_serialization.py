@@ -5,12 +5,13 @@ from typing import Tuple, TypeVar, Type
 
 import cattleman
 from cattleman.types import Cluster, IPAddressType, IPAddress, Node, PersistentResource, \
-    TransportProtocol, DNSRecordType
+    TransportProtocol, DNSRecordType, Pod
 from cattleman.persistency import Persistency
 from cattleman.types.application import Application
 from cattleman.types.basics import Fragment
 from cattleman.types.dns_record import DNSRecord
 from cattleman.types.port import Port
+from cattleman.types.relation import Relation
 from cattleman.types.request import Request
 from cattleman.types.service import Service
 
@@ -49,6 +50,18 @@ class TestSerialization(unittest.TestCase):
         node = Node.make("test", [ip], cluster, description="My test node")
         node2 = self._loop(node, Node)
         self.assertEqual(node.serialize(), node2.serialize())
+
+    def test_serialize_pod(self):
+        # application
+        application = Application.make("test", description="My test application")
+        # node
+        cluster = Cluster.make("test", description="My test cluster")
+        ip = IPAddress.make("test", "8.8.8.8", IPAddressType.IPv4, description="My test ip")
+        node = Node.make("test", [ip], cluster, description="My test node")
+        # pod
+        pod = Pod.make("test", node, application, description="My test pod")
+        pod2 = self._loop(pod, Pod)
+        self.assertEqual(pod.serialize(), pod2.serialize())
 
     def test_serialize_port_tcp(self):
         port = Port.make("test", 80, 8080, TransportProtocol.TCP, description="My test port")

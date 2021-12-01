@@ -122,3 +122,22 @@ create table if not exists requests
 
 create unique index if not exists requests_id_uindex
     on requests (id);
+
+
+-- Relations between Resources
+
+create table if not exists relations
+(
+    id TEXT not null
+        constraint relations_pk
+            primary key,
+    origin TEXT not null,
+    relation TEXT not null,
+    destination TEXT not null,
+    destination_type TEXT not null,
+    date TEXT not null,
+    value BLOB not null
+);
+
+create unique index if not exists relations_id_uindex
+    on relations (origin, relation, destination);

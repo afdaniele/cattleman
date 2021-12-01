@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IIPAddress, IPAddressType, Resource
+from .basics import ResourceID, IIPAddress, IPAddressType, Resource, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -18,7 +18,7 @@ class IPAddress(IIPAddress):
         assert_type(description, str, nullable=True)
         # ---
         ip = IPAddress(
-            id=ResourceID.make("ip"),
+            id=ResourceID.make(ResourceType.IP_ADDRESS),
             name=name,
             description=description,
             _type=type,

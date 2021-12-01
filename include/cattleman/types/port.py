@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IPort, Resource, TransportProtocol
+from .basics import ResourceID, IPort, Resource, TransportProtocol, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -19,7 +19,7 @@ class Port(IPort):
         assert_type(description, str, nullable=True)
         # ---
         port = Port(
-            id=ResourceID.make("port"),
+            id=ResourceID.make(ResourceType.PORT),
             name=name,
             description=description,
             _internal=internal,

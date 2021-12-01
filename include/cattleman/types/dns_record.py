@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IDNSRecord, Resource, DNSRecordType
+from .basics import ResourceID, IDNSRecord, Resource, DNSRecordType, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -19,7 +19,7 @@ class DNSRecord(IDNSRecord):
         assert_type(description, str, nullable=True)
         # ---
         dns_record = DNSRecord(
-            id=ResourceID.make("dns_record"),
+            id=ResourceID.make(ResourceType.DNS_RECORD),
             name=name,
             description=description,
             _type=type,

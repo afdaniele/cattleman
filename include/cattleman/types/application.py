@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IApplication, Resource
+from .basics import ResourceID, IApplication, Resource, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -15,7 +15,7 @@ class Application(IApplication):
         assert_type(description, str, nullable=True)
         # ---
         application = Application(
-            id=ResourceID.make("application"),
+            id=ResourceID.make(ResourceType.APPLICATION),
             name=name,
             description=description,
         )

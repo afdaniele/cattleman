@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IService, Resource, IPort, IApplication, IDNSRecord
+from .basics import ResourceID, IService, Resource, IPort, IApplication, IDNSRecord, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -18,7 +18,7 @@ class Service(IService):
         assert_type(description, str, nullable=True)
         # ---
         service = Service(
-            id=ResourceID.make("service"),
+            id=ResourceID.make(ResourceType.SERVICE),
             name=name,
             description=description,
             _application=application.id,

@@ -2,7 +2,7 @@ from typing import Optional
 
 import cbor2
 
-from .basics import ResourceID, IPod, Resource, INode, IApplication
+from .basics import ResourceID, IPod, Resource, INode, IApplication, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -17,7 +17,7 @@ class Pod(IPod):
         assert_type(description, str, nullable=True)
         # ---
         pod = Pod(
-            id=ResourceID.make("pod"),
+            id=ResourceID.make(ResourceType.POD),
             name=name,
             description=description,
             _node=node.id,

@@ -5,6 +5,7 @@ import uuid
 from abc import abstractmethod, ABC
 from datetime import datetime
 from enum import Enum, IntEnum
+from threading import Semaphore
 from typing import List, Dict, Any, Optional
 
 import cbor2
@@ -47,6 +48,11 @@ class KnowledgeBase:
         KnowledgeBase.__resources[id] = resource
 
     @staticmethod
+    def shutdown():
+        for resource in KnowledgeBase.__resources.values():
+            resource.shutdown()
+
+    @staticmethod
     def clear():
         KnowledgeBase.__resources.clear()
 
@@ -76,12 +82,39 @@ class Status(Enum):
     SUCCESS = "success"
 
 
+class ResourceType(Enum):
+    CLUSTER = "cluster"
+    NODE = "node"
+    POD = "pod"
+    APPLICATION = "application"
+    SERVICE = "service"
+    IP_ADDRESS = "ip"
+    PORT = "port"
+    DNS_RECORD = "dns"
+    REQUEST = "request"
+    RELATION = "relation"
+
+    def __conform__(self, protocol):
+        if protocol is sqlite3.PrepareProtocol:
+            return self.value
+
+
+class RelationType(Enum):
+    IS_A = "isa"
+    BELONGS_TO = "belongsto"
+
+    def __conform__(self, protocol):
+        if protocol is sqlite3.PrepareProtocol:
+            return self.value
+
+
 class ResourceID(str, Serializable):
 
     @staticmethod
-    def make(category: str) -> 'ResourceID':
+    def make(type: ResourceType) -> 'ResourceID':
+        assert_type(type, ResourceType)
         s = str(uuid.uuid4())[:8]
-        return ResourceID(f"{category}:{s}")
+        return ResourceID(f"{type.value}:{s}")
 
     def __conform__(self, protocol):
         if protocol is sqlite3.PrepareProtocol:
@@ -170,32 +203,42 @@ class Resource(Serializable, ABC):
     def make(self, *args, **kwargs) -> 'Resource':
         pass
 
+    @abstractmethod
+    def get_type(self) -> ResourceType:
+        pass
+
+    @abstractmethod
+    def shutdown(self):
+        pass
+
 
 @dataclasses.dataclass
 class PersistentResource(Resource, ABC):
 
-    @abstractmethod
-    def _sql_table(self) -> str:
-        pass
+    def __post_init__(self):
+        self._lock = Semaphore()
 
-    def _log_event(self, event: str):
-        # TODO: implement this
-        pass
+    def shutdown(self):
+        self._lock.acquire()
+        self.commit(lock=False)
+        # lease lock acquired
 
-    def _log_update(self, field: str, current: Any, new: Any, reason: Optional[str] = None):
-        # TODO: implement this
-        pass
-
-    def commit(self):
+    def commit(self, lock: bool = True):
+        if lock:
+            self._lock.acquire()
+        # ---
         KnowledgeBase.set(self.id, self)
         data = self.serialize()
         table = self._sql_table()
         with Persistency.session("resources") as cursor:
             # TODO: this is only supported by SQLite 3.24+, ubuntu 18.04 runs SQLite 3.22
-            # query = f"INSERT INTO {table}(id, date, enabled, value) " \
-            #         f"VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET value = excluded.value;"
-            query = f"INSERT INTO {table}(id, date, enabled, value) VALUES (?, ?, ?, ?)"
+            query = f"INSERT INTO {table}(id, date, enabled, value) " \
+                    f"VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET value = excluded.value;"
+            # query = f"INSERT INTO {table}(id, date, enabled, value) VALUES (?, ?, ?, ?)"
             cursor.execute(query, self.id, now(), True, data)
+        # ---
+        if lock:
+            self._lock.release()
 
     @staticmethod
     def _serialize_value(value):
@@ -218,9 +261,23 @@ class PersistentResource(Resource, ABC):
     def serialize(self) -> bytes:
         data = {}
         for field in dataclasses.fields(self):
+            if field.name.startswith("__"):
+                continue
             field_value = getattr(self, field.name)
             data[field.name] = self._serialize_value(field_value)
         return cbor2.dumps(data)
+
+    @abstractmethod
+    def _sql_table(self) -> str:
+        pass
+
+    def _log_event(self, event: str):
+        # TODO: implement this
+        pass
+
+    def _log_update(self, field: str, current: Any, new: Any, reason: Optional[str] = None):
+        # TODO: implement this
+        pass
 
 
 # Persistent resources
@@ -253,6 +310,9 @@ class IIPAddress(PersistentResource, ABC):
 
     def _sql_table(self) -> str:
         return "ip_addresses"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.IP_ADDRESS
 
 
 @dataclasses.dataclass
@@ -294,6 +354,9 @@ class IPort(PersistentResource, ABC):
     def _sql_table(self) -> str:
         return "ports"
 
+    def get_type(self) -> ResourceType:
+        return ResourceType.PORT
+
 
 @dataclasses.dataclass
 class IDNSRecord(PersistentResource, ABC):
@@ -334,6 +397,9 @@ class IDNSRecord(PersistentResource, ABC):
     def _sql_table(self) -> str:
         return "dns_records"
 
+    def get_type(self) -> ResourceType:
+        return ResourceType.DNS_RECORD
+
 
 @dataclasses.dataclass
 class IPod(PersistentResource, ABC):
@@ -351,12 +417,18 @@ class IPod(PersistentResource, ABC):
     def _sql_table(self) -> str:
         return "pods"
 
+    def get_type(self) -> ResourceType:
+        return ResourceType.POD
+
 
 @dataclasses.dataclass
 class IApplication(PersistentResource, ABC):
 
     def _sql_table(self) -> str:
         return "applications"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.APPLICATION
 
 
 @dataclasses.dataclass
@@ -379,6 +451,9 @@ class IService(PersistentResource, ABC):
 
     def _sql_table(self) -> str:
         return "services"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.SERVICE
 
 
 @dataclasses.dataclass
@@ -406,19 +481,23 @@ class INode(PersistentResource, ABC):
     def _sql_table(self) -> str:
         return "nodes"
 
+    def get_type(self) -> ResourceType:
+        return ResourceType.NODE
+
 
 @dataclasses.dataclass
 class ICluster(PersistentResource, ABC):
-    _nodes: List[ResourceID] = make_field(list, content=ResourceID, default=list)
 
     @property
+    @abstractmethod
     def nodes(self) -> List[INode]:
-        return [
-            KnowledgeBase.get(n) for n in self._nodes
-        ]
+        pass
 
     def _sql_table(self) -> str:
         return "clusters"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.CLUSTER
 
 
 @dataclasses.dataclass
@@ -427,3 +506,42 @@ class IRequest(PersistentResource, ABC):
 
     def _sql_table(self) -> str:
         return "requests"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.REQUEST
+
+
+@dataclasses.dataclass
+class IRelation(PersistentResource, ABC):
+    _origin: ResourceID = make_field(ResourceID)
+    _relation: RelationType = make_field(RelationType)
+    _destination: ResourceID = make_field(ResourceID)
+    _value: Dict[str, Any] = make_field(dict, content=(str, object))
+
+    def commit(self, lock: bool = True):
+        if lock:
+            self._lock.acquire()
+        # ---
+        KnowledgeBase.set(self.id, self)
+        data = self.serialize()
+        table = self._sql_table()
+        destination = KnowledgeBase.get(self._destination)
+        with Persistency.session("resources") as cursor:
+            # TODO: this is only supported by SQLite 3.24+, ubuntu 18.04 runs SQLite 3.22
+            query = f"INSERT INTO {table}(id, origin, relation, destination, destination_type, " \
+                    f"date, value) VALUES (?, ?, ?, ?, ?, ?, ?) " \
+                    f"ON CONFLICT (origin, relation, destination) " \
+                    f"DO UPDATE SET value = excluded.value;"
+            # query = f"INSERT INTO {table}(id, origin, relation, destination, destination_type, date, value) " \
+            #         f"VALUES (?, ?, ?, ?, ?, ?)"
+            cursor.execute(query, self.id, self._origin, self._relation, self._destination,
+                           destination.get_type(), now(), data)
+        # ---
+        if lock:
+            self._lock.release()
+
+    def _sql_table(self) -> str:
+        return "relations"
+
+    def get_type(self) -> ResourceType:
+        return ResourceType.RELATION
