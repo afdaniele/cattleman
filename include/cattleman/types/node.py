@@ -1,33 +1,41 @@
 from typing import Optional, List
 
+import cbor2
+
 from .basics import INode, ResourceID, IIPAddress, ICluster, Resource
 from ..utils.misc import assert_type
 
 
 class Node(INode):
 
-    def __init__(self, name: str, ip_addresses: List[IIPAddress], cluster: ICluster, *, id: Optional[ResourceID] = None,
-                 description: Optional[str] = None):
-        # make new ID if needed
-        if id is None:
-            id = ResourceID.make("node")
+    @staticmethod
+    def make(name: str, ip_addresses: List[IIPAddress], cluster: ICluster, *, description: Optional[str] = None) -> 'Node':
         # verify types
         assert_type(name, str)
-        assert_type(ip_addresses, list)
+        assert_type(ip_addresses, list, content_klass=IIPAddress)
         assert_type(cluster, ICluster)
-        assert_type(id, ResourceID, nullable=True)
         assert_type(description, str, nullable=True)
-        # get IPs' ID
-        ip_ids = list(map(lambda ip: ip.id, ip_addresses))
-        super(Node, self).__init__(
-            id=id,
+        # ---
+        node = Node(
+            id=ResourceID.make("node"),
             name=name,
             description=description,
-            _ip_addresses=ip_ids,
-            _cluster=cluster.id,
-            **Resource.defaults()
+            _ip_addresses=list(map(lambda ip: ip.id, ip_addresses)),
+            _cluster=cluster.id
         )
-        self._commit()
+        node.commit()
+        return node
+
+    @classmethod
+    def deserialize(cls, data: bytes) -> 'Node':
+        data = cbor2.loads(data)
+        return Node(
+            **Resource.parse(data),
+            _ip_addresses=[ResourceID.deserialize(s) for s in data['_ip_addresses']],
+            _cluster=ResourceID.deserialize(data['_cluster']),
+            _pods=[ResourceID.deserialize(s) for s in data['_pods']],
+        )
+
 
     # @classmethod
     # def _from_dict(cls, data: dict) -> 'INode':

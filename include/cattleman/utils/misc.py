@@ -106,8 +106,9 @@ def typing_content_type(type) -> type:
     return type
 
 
-def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool = False,
-                field: Optional[str] = None):
+def assert_type(value: Any, klass: Union[Type, Iterable[Type]],
+                content_klass: Optional[Union[Type, Iterable[Type]]] = None,
+                nullable: bool = False, field: Optional[str] = None):
     if value is None and nullable:
         return
 
@@ -136,6 +137,9 @@ def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool =
     #             assert_type(elem, content[0], field=f"{field}[{i}]")
     # else:
 
-
+    if content_klass is not None:
+        for elem in value:
+            assert_type(elem, content_klass)
+    # single object
     if not isinstance(value, klass):
         raise TypeMismatchException(klass, value, field=field)

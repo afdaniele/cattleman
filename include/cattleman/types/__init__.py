@@ -1,7 +1,7 @@
 from .basics import \
     KnowledgeBase, \
     IPAddressType, \
-    DNSType, \
+    DNSRecordType, \
     TransportProtocol, \
     Status, \
     ResourceID, \

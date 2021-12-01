@@ -44,3 +44,11 @@ class TypeMismatchException(CattlemanException):
         msg = f"Expected type '{expected}'{extra}, " \
               f"an object of type '{received}' was received instead."
         super(TypeMismatchException, self).__init__(msg)
+
+
+class MissingParameterException(CattlemanException):
+
+    def __init__(self, klass: type, method: str, parameter: str):
+        msg = f"The method {klass.__name__}.{method} expects parameter '{parameter}' which was " \
+              f"not passed."
+        super(MissingParameterException, self).__init__(msg)

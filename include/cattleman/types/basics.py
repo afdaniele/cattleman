@@ -1,37 +1,32 @@
 import copy
+import dataclasses
 import sqlite3
 import uuid
 from abc import abstractmethod, ABC
-from builtins import setattr
-from collections import Iterable
 from datetime import datetime
 from enum import Enum, IntEnum
-from inspect import isclass
-from typing import List, Dict, Union, Any, Optional, TypeVar
+from typing import List, Dict, Any, Optional
 
 import cbor2
-import dataclasses
 
-from cattleman.constants import REQUIRED
-from cattleman.exceptions import ResourceNotFoundException, TypeMismatchException
+from cattleman.constants import NoneType, UNDEFINED
+from cattleman.exceptions import ResourceNotFoundException, MissingParameterException
 from cattleman.persistency import Persistency
-from cattleman.utils.misc import assert_type, now, typing_type, typing_content_type
+from cattleman.utils.dataclasses import make_field
+from cattleman.utils.misc import assert_type, now
 
 Arguments = List[str]
-
-
-Fragment = Dict
 
 
 class Serializable(ABC):
 
     @abstractmethod
-    def serialize(self):
+    def serialize(self) -> bytes:
         pass
 
     @classmethod
     @abstractmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data) -> 'Serializable':
         pass
 
 
@@ -64,7 +59,7 @@ class IPAddressType(IntEnum):
     IPv6 = 6
 
 
-class DNSType(Enum):
+class DNSRecordType(Enum):
     A = "A"
     AAAA = "AAAA"
     CNAME = "CNAME"
@@ -92,27 +87,31 @@ class ResourceID(str, Serializable):
         if protocol is sqlite3.PrepareProtocol:
             return str(self)
 
-    def serialize(self):
+    def serialize(self) -> str:
         return str(self)
 
     @classmethod
-    def deserialize(cls, data: str):
+    def deserialize(cls, data: str) -> 'ResourceID':
         return ResourceID(data)
+
+
+class Fragment(dict):
+    pass
 
 
 @dataclasses.dataclass
 class ResourceStatus(Serializable):
-    key: str
-    value: Status
-    description: Optional[str] = None
-    reason: Optional[str] = None
-    date: datetime = dataclasses.field(default_factory=now)
+    key: str = make_field(str)
+    value: Status = make_field(Status)
+    description: Optional[str] = make_field((str, NoneType), default=None)
+    reason: Optional[str] = make_field(ResourceID, default=None)
+    date: datetime = make_field(datetime, default=now)
 
-    def serialize(self):
+    def serialize(self) -> dict:
         return copy.copy(self.__dict__)
 
     @classmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data) -> 'ResourceStatus':
         return ResourceStatus(**data)
 
     @staticmethod
@@ -128,32 +127,48 @@ class ResourceStatus(Serializable):
 
 @dataclasses.dataclass
 class Resource(Serializable, ABC):
-    id: ResourceID
-    name: str
-    description: Optional[str]
-    status: List[ResourceStatus] = dataclasses.field(
-        default_factory=lambda: [ResourceStatus.created()]
-    )
-
-    # def __post_init__(self):
-    #     assert_type(self.id, ResourceID)
-    #     assert_type(self.name, str)
-    #     assert_type(self.description, str, nullable=True)
-    #     assert_type(self.status, list)
+    id: ResourceID = make_field(ResourceID)
+    name: str = make_field(str)
+    description: Optional[str] = make_field((str, NoneType))
+    status: List[ResourceStatus] = make_field(list,
+                                              content=ResourceStatus,
+                                              factory=lambda: [ResourceStatus.created()])
 
     def __post_init__(self):
         for field in dataclasses.fields(self):
             name = field.name
-            type = field.type
+            metadata = field.metadata
+            vtype = metadata['type']
             value = getattr(self, name)
+            # required
+            if value is UNDEFINED:
+                raise MissingParameterException(type(self), "__init__", name)
             # check types
-            assert_type(value, type, field=name)
+            assert_type(value, vtype, field=name)
+            # iterables
+            if type(value) in [list, set, tuple]:
+                ctype = metadata['content']
+                for i, elem in enumerate(value):
+                    assert_type(elem, ctype, field=f"{field}[{i}]")
+            # dictionaries
+            if isinstance(value, dict):
+                ktype, vtype = metadata['content']
+                for kelem, velem in value.items():
+                    assert_type(kelem, ktype, field=f"key {kelem} in {field}")
+                    assert_type(velem, vtype, field=f"{field}[{kelem}]")
 
     @staticmethod
-    def defaults() -> dict:
+    def parse(data: dict) -> dict:
         return {
-            "status": []
+            "id": ResourceID.deserialize(data['id']),
+            "name": data['name'],
+            "description": data['description'],
+            "status": [ResourceStatus.deserialize(s) for s in data['status']],
         }
+
+    @abstractmethod
+    def make(self, *args, **kwargs) -> 'Resource':
+        pass
 
 
 @dataclasses.dataclass
@@ -200,29 +215,6 @@ class PersistentResource(Resource, ABC):
         # ---
         return value
 
-    @staticmethod
-    def _deserialize_value(value: Any, klass: type):
-        try:
-            assert_type(value, klass)
-            return value
-        except TypeMismatchException:
-            pass
-        # pack enums
-        if issubclass(klass, Enum):
-            value = klass(value)
-        # serializable elements
-        if issubclass(klass, Serializable) and not isinstance(value, klass):
-            value = klass.deserialize(value)
-        # iterables
-        if isinstance(value, Iterable):
-            iterable = type(value)
-            value = iterable([PersistentResource._deserialize_value(v, klass) for v in value])
-        # dictionary
-        if isinstance(value, dict):
-            value = {k: PersistentResource._deserialize_value(v, klass) for k, v in value.items()}
-        # ---
-        return value
-
     def serialize(self) -> bytes:
         data = {}
         for field in dataclasses.fields(self):
@@ -230,46 +222,14 @@ class PersistentResource(Resource, ABC):
             data[field.name] = self._serialize_value(field_value)
         return cbor2.dumps(data)
 
-    @classmethod
-    def deserialize(cls, data: bytes) -> Resource:
-        pass
-
-    # @classmethod
-    # def deserialize(cls, data: bytes) -> Resource:
-    #     # print(super())
-    #     # print(cls.__base__)
-    #     data = cbor2.loads(data)
-    #
-    #     print(data)
-    #
-    #     values = {}
-    #     for field in dataclasses.fields(cls):
-    #         print(field)
-    #         field_value = data[field.name]
-    #         values[field.name] = PersistentResource._deserialize_value(field_value, field.type)
-    #         # setattr(obj, field.name, obj._deserialize_value(field_value, field.type))
-    #
-    #     print(values)
-    #
-    #     obj = cls(**values)
-    #     return obj
-    #
-    #     return cls(**data)
-    #     return cls._from_dict(cbor2.loads(data))
-
 
 # Persistent resources
 
 
 @dataclasses.dataclass
 class IIPAddress(PersistentResource, ABC):
-    _type: IPAddressType = REQUIRED
-    _value: str = REQUIRED
-
-    def __post_init__(self):
-        assert_type(self._type, IPAddressType)
-        assert_type(self._value, str)
-        super(IIPAddress, self).__post_init__()
+    _type: IPAddressType = make_field(IPAddressType)
+    _value: str = make_field(str)
 
     @property
     def type(self) -> IPAddressType:
@@ -283,13 +243,13 @@ class IIPAddress(PersistentResource, ABC):
     def type(self, value: IPAddressType):
         assert_type(value, IPAddressType)
         self._type = value
-        self._commit()
+        self.commit()
 
     @value.setter
     def value(self, value: str):
         assert_type(value, str)
         self._value = value
-        self._commit()
+        self.commit()
 
     def _sql_table(self) -> str:
         return "ip_addresses"
@@ -297,15 +257,9 @@ class IIPAddress(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IPort(PersistentResource, ABC):
-    _internal: int = REQUIRED
-    _external: int = REQUIRED
-    _protocol: TransportProtocol = REQUIRED
-
-    def __post_init__(self):
-        assert_type(self._internal, int)
-        assert_type(self._external, int)
-        assert_type(self._protocol, TransportProtocol)
-        super(IPort, self).__post_init__()
+    _internal: int = make_field(int)
+    _external: int = make_field(int)
+    _protocol: TransportProtocol = make_field(TransportProtocol)
 
     @property
     def internal(self) -> int:
@@ -323,19 +277,19 @@ class IPort(PersistentResource, ABC):
     def internal(self, value: int):
         assert_type(value, int)
         self._internal = value
-        self._commit()
+        self.commit()
 
     @external.setter
     def external(self, value: int):
         assert_type(value, int)
         self._external = value
-        self._commit()
+        self.commit()
 
     @protocol.setter
     def protocol(self, value: TransportProtocol):
         assert_type(value, TransportProtocol)
         self._protocol = value
-        self._commit()
+        self.commit()
 
     def _sql_table(self) -> str:
         return "ports"
@@ -343,18 +297,12 @@ class IPort(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IDNSRecord(PersistentResource, ABC):
-    _type: DNSType = REQUIRED
-    _value: str = REQUIRED
-    _ttl: int = 30
-
-    def __post_init__(self):
-        assert_type(self._type, DNSType)
-        assert_type(self._value, str)
-        assert_type(self._ttl, int)
-        super(IDNSRecord, self).__post_init__()
+    _type: DNSRecordType = make_field(DNSRecordType)
+    _value: str = make_field(str)
+    _ttl: int = make_field(int, default=30)
 
     @property
-    def type(self) -> DNSType:
+    def type(self) -> DNSRecordType:
         return self._type
 
     @property
@@ -366,22 +314,22 @@ class IDNSRecord(PersistentResource, ABC):
         return self._ttl
 
     @type.setter
-    def type(self, value: DNSType):
-        assert_type(value, DNSType)
+    def type(self, value: DNSRecordType):
+        assert_type(value, DNSRecordType)
         self._type = value
-        self._commit()
+        self.commit()
 
     @value.setter
     def value(self, value: str):
         assert_type(value, str)
         self._value = value
-        self._commit()
+        self.commit()
 
     @ttl.setter
     def ttl(self, value: int):
         assert_type(value, int)
         self._ttl = value
-        self._commit()
+        self.commit()
 
     def _sql_table(self) -> str:
         return "dns_records"
@@ -389,15 +337,16 @@ class IDNSRecord(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IPod(PersistentResource, ABC):
-    _node: ResourceID = REQUIRED
-
-    def __post_init__(self):
-        assert_type(self._node, ResourceID)
-        super(IPod, self).__post_init__()
+    _node: ResourceID = make_field(ResourceID)
+    _application: ResourceID = make_field(ResourceID)
 
     @property
     def node(self) -> 'INode':
         return KnowledgeBase.get(self._node)
+
+    @property
+    def application(self) -> 'INode':
+        return KnowledgeBase.get(self._application)
 
     def _sql_table(self) -> str:
         return "pods"
@@ -405,25 +354,6 @@ class IPod(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IApplication(PersistentResource, ABC):
-    _pods: List[ResourceID] = dataclasses.field(default_factory=list)
-    _services: List[ResourceID] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self):
-        assert_type(self._pods, list)
-        assert_type(self._services, list)
-        super(IApplication, self).__post_init__()
-
-    @property
-    def pods(self) -> List[IPod]:
-        return [
-            KnowledgeBase.get(p) for p in self._pods
-        ]
-
-    @property
-    def services(self) -> List['IService']:
-        return [
-            KnowledgeBase.get(s) for s in self._services
-        ]
 
     def _sql_table(self) -> str:
         return "applications"
@@ -431,15 +361,9 @@ class IApplication(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IService(PersistentResource, ABC):
-    _application: ResourceID = REQUIRED
-    _port: ResourceID = REQUIRED
-    _dns: ResourceID = REQUIRED
-
-    def __post_init__(self):
-        assert_type(self._application, ResourceID)
-        assert_type(self._port, ResourceID)
-        assert_type(self._dns, ResourceID)
-        super(IService, self).__post_init__()
+    _application: ResourceID = make_field(ResourceID)
+    _port: ResourceID = make_field(ResourceID)
+    _dns: ResourceID = make_field(ResourceID)
 
     @property
     def application(self) -> IApplication:
@@ -459,15 +383,9 @@ class IService(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class INode(PersistentResource, ABC):
-    _ip_addresses: List[ResourceID] = REQUIRED
-    _cluster: ResourceID = REQUIRED
-    _pods: List[ResourceID] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self):
-        assert_type(self._ip_addresses, list)
-        assert_type(self._cluster, ResourceID)
-        assert_type(self._pods, list)
-        super(INode, self).__post_init__()
+    _ip_addresses: List[ResourceID] = make_field(list, content=ResourceID)
+    _cluster: ResourceID = make_field(ResourceID)
+    _pods: List[ResourceID] = make_field(list, content=ResourceID, factory=list)
 
     @property
     def ip_addresses(self) -> List['IIPAddress']:
@@ -491,11 +409,7 @@ class INode(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class ICluster(PersistentResource, ABC):
-    _nodes: List[ResourceID] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self):
-        assert_type(self._nodes, list)
-        super(ICluster, self).__post_init__()
+    _nodes: List[ResourceID] = make_field(list, content=ResourceID, default=list)
 
     @property
     def nodes(self) -> List[INode]:
@@ -509,13 +423,7 @@ class ICluster(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IRequest(PersistentResource, ABC):
-    _fragment: Fragment = REQUIRED
-    _status: Status = REQUIRED
-
-    def __post_init__(self):
-        assert_type(self._fragment, dict)
-        assert_type(self._status, Status)
-        super(IRequest, self).__post_init__()
+    _fragment: Fragment = make_field(Fragment, content=(str, object))
 
     def _sql_table(self) -> str:
         return "requests"

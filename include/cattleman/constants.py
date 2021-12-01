@@ -10,6 +10,9 @@ DATABASE_SCHEMA_VERSION = "1.0"
 UNDEFINED = object()
 REQUIRED = object()
 
+NoneType: type = type(None)
+
+
 CANONICAL_ARCH = {
     "arm": "arm32v7",
     "arm32v7": "arm32v7",
