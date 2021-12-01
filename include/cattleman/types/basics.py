@@ -2,16 +2,19 @@ import copy
 import sqlite3
 import uuid
 from abc import abstractmethod, ABC
+from builtins import setattr
 from datetime import datetime
 from enum import Enum, IntEnum
-from typing import List, Dict, Union, Any, Optional
+from inspect import isclass
+from typing import List, Dict, Union, Any, Optional, TypeVar
 
 import cbor2
 import dataclasses
 
-from cattleman.exceptions import ResourceNotFoundException
+from cattleman.constants import REQUIRED
+from cattleman.exceptions import ResourceNotFoundException, TypeMismatchException
 from cattleman.persistency import Persistency
-from cattleman.utils.misc import assert_type, now
+from cattleman.utils.misc import assert_type, now, typing_type, typing_content_type
 
 Arguments = List[str]
 
@@ -36,17 +39,16 @@ class KnowledgeBase:
     __resources: Dict[str, 'Resource'] = {}
 
     @staticmethod
-    def get(resource_id: Union[str, 'ResourceID']):
-        resource_id = resource_id if isinstance(resource_id, str) else str(resource_id)
+    def get(id: 'ResourceID'):
+        id = id if isinstance(id, str) else str(id)
         try:
-            KnowledgeBase.__resources[resource_id]
+            KnowledgeBase.__resources[id]
         except KeyError:
-            raise ResourceNotFoundException(resource_id)
+            raise ResourceNotFoundException(id)
 
     @staticmethod
-    def set(resource_id: Union[str, 'ResourceID'], resource: 'Resource'):
-        resource_id = resource_id.value if isinstance(resource_id, ResourceID) else str(resource_id)
-        KnowledgeBase.__resources[resource_id] = resource
+    def set(id: 'ResourceID', resource: 'Resource'):
+        KnowledgeBase.__resources[id] = resource
 
     @staticmethod
     def clear():
@@ -73,19 +75,36 @@ class TransportProtocol(Enum):
 
 
 class Status(Enum):
-    SETUP = "setup"
-    WAITING = "waiting"
-    ERROR = "error"
-    TIMEOUT = "timeout"
-    READY = "ready"
-    TERMINATED = "terminated"
+    UNKNOWN = "unknown"
+    FAILURE = "failure"
+    SUCCESS = "success"
+
+
+class ResourceID(str, Serializable):
+
+    @staticmethod
+    def make(category: str) -> 'ResourceID':
+        s = str(uuid.uuid4())[:8]
+        return ResourceID(f"{category}:{s}")
+
+    def __conform__(self, protocol):
+        if protocol is sqlite3.PrepareProtocol:
+            return str(self)
+
+    def serialize(self):
+        return str(self)
+
+    @classmethod
+    def deserialize(cls, data: str):
+        return ResourceID(data)
 
 
 @dataclasses.dataclass
 class ResourceStatus(Serializable):
-    description: str
-    reason: str
+    key: str
     value: Status
+    description: Optional[str] = None
+    reason: Optional[str] = None
     date: datetime = dataclasses.field(default_factory=now)
 
     def serialize(self):
@@ -95,50 +114,42 @@ class ResourceStatus(Serializable):
     def deserialize(cls, data):
         return ResourceStatus(**data)
 
-
-@dataclasses.dataclass
-class ResourceID(Serializable):
-    value: str
-
     @staticmethod
-    def make(category: str) -> 'ResourceID':
-        s = str(uuid.uuid4())[:8]
-        return ResourceID(f"{category}:{s}")
-
-    def __str__(self):
-        return self.value
-
-    def __conform__(self, protocol):
-        if protocol is sqlite3.PrepareProtocol:
-            return self.value
-
-    def serialize(self):
-        return self.value
-
-    @classmethod
-    def deserialize(cls, data):
-        return ResourceID(data)
+    def created() -> 'ResourceStatus':
+        return ResourceStatus(
+            key="created",
+            value=Status.SUCCESS
+        )
 
 
 # Resource base
 
 
 @dataclasses.dataclass
-class Resource:
+class Resource(Serializable, ABC):
     id: ResourceID
     name: str
-    description: str
-    status: List[Status]
+    description: Optional[str]
+    status: List[ResourceStatus] = dataclasses.field(
+        default_factory=lambda: [ResourceStatus.created()]
+    )
+
+    # def __post_init__(self):
+    #     assert_type(self.id, ResourceID)
+    #     assert_type(self.name, str)
+    #     assert_type(self.description, str, nullable=True)
+    #     assert_type(self.status, list)
 
     def __post_init__(self):
-        assert_type(self.id, ResourceID)
-        assert_type(self.name, str)
-        assert_type(self.description, str, nullable=True)
-        assert_type(self.status, list)
+        for field in dataclasses.fields(self):
+            name = field.name
+            type = field.type
+            value = getattr(self, name)
+            # check types
+            assert_type(value, type, field=name)
 
     @staticmethod
     def defaults() -> dict:
-
         return {
             "status": []
         }
@@ -151,15 +162,6 @@ class PersistentResource(Resource):
     def _sql_table(self) -> str:
         pass
 
-    # @classmethod
-    # @abstractmethod
-    # def _from_dict(cls, data: dict) -> 'PersistentResource':
-    #     pass
-
-    @classmethod
-    def _from_dict(cls, data: dict) -> 'Resource':
-        return super(cls).__init__(**data)
-
     def _log_event(self, event: str):
         # TODO: implement this
         pass
@@ -168,8 +170,8 @@ class PersistentResource(Resource):
         # TODO: implement this
         pass
 
-    def _commit(self):
-        KnowledgeBase.set(self.id.value, self)
+    def commit(self):
+        KnowledgeBase.set(self.id, self)
         data = self.serialize()
         table = self._sql_table()
         with Persistency.session("resources") as cursor:
@@ -191,6 +193,37 @@ class PersistentResource(Resource):
         if isinstance(value, (list, set, tuple)):
             iterable = type(value)
             value = iterable([PersistentResource._serialize_value(v) for v in value])
+        # dictionary
+        if isinstance(value, dict):
+            value = {k: PersistentResource._serialize_value(v) for k, v in value.items()}
+        # ---
+        return value
+
+    @staticmethod
+    def _deserialize_value(value: Any, type: type):
+        try:
+            assert_type(value, type)
+            return value
+        except TypeMismatchException:
+            pass
+        # iterables
+        if typing_type(type) in (list, set, tuple):
+            iterable = typing_type(type)
+            content_type = typing_content_type(type)
+            return iterable([PersistentResource._deserialize_value(v, content_type) for v in value])
+
+        # if not isclass(type):
+        #     return value
+        print(type)
+        # pack enums
+        if issubclass(type, Enum):
+            value = type(value)
+        # serializable elements
+        if issubclass(type, Serializable) and not isinstance(value, type):
+            value = type.deserialize(value)
+        # # dictionary
+        # if isinstance(value, dict):
+        #     value = {k: PersistentResource._serialize_value(v) for k, v in value.items()}
         # ---
         return value
 
@@ -203,10 +236,23 @@ class PersistentResource(Resource):
 
     @classmethod
     def deserialize(cls, data: bytes) -> Resource:
-        print(super())
-        print(cls.__base__)
+        # print(super())
+        # print(cls.__base__)
         data = cbor2.loads(data)
-        obj = cls(**data)
+
+        print(data)
+
+        values = {}
+        for field in dataclasses.fields(cls):
+            print(field)
+            field_value = data[field.name]
+            values[field.name] = PersistentResource._deserialize_value(field_value, field.type)
+            # setattr(obj, field.name, obj._deserialize_value(field_value, field.type))
+
+        print(values)
+
+        obj = cls(**values)
+        return obj
 
         return cls(**data)
         return cls._from_dict(cbor2.loads(data))
@@ -217,8 +263,8 @@ class PersistentResource(Resource):
 
 @dataclasses.dataclass
 class IIPAddress(PersistentResource, ABC):
-    _type: IPAddressType
-    _value: str
+    _type: IPAddressType = REQUIRED
+    _value: str = REQUIRED
 
     def __post_init__(self):
         assert_type(self._type, IPAddressType)
@@ -251,9 +297,9 @@ class IIPAddress(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IPort(PersistentResource, ABC):
-    _internal: int
-    _external: int
-    _protocol: TransportProtocol
+    _internal: int = REQUIRED
+    _external: int = REQUIRED
+    _protocol: TransportProtocol = REQUIRED
 
     def __post_init__(self):
         assert_type(self._internal, int)
@@ -297,8 +343,8 @@ class IPort(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IDNSRecord(PersistentResource, ABC):
-    _type: DNSType
-    _value: str
+    _type: DNSType = REQUIRED
+    _value: str = REQUIRED
     _ttl: int = 30
 
     def __post_init__(self):
@@ -343,7 +389,7 @@ class IDNSRecord(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IPod(PersistentResource, ABC):
-    _node: ResourceID
+    _node: ResourceID = REQUIRED
 
     def __post_init__(self):
         assert_type(self._node, ResourceID)
@@ -385,9 +431,9 @@ class IApplication(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IService(PersistentResource, ABC):
-    _application: ResourceID
-    _port: ResourceID
-    _dns: ResourceID
+    _application: ResourceID = REQUIRED
+    _port: ResourceID = REQUIRED
+    _dns: ResourceID = REQUIRED
 
     def __post_init__(self):
         assert_type(self._application, ResourceID)
@@ -413,8 +459,8 @@ class IService(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class INode(PersistentResource, ABC):
-    _ip_addresses: List[ResourceID]
-    _cluster: ResourceID
+    _ip_addresses: List[ResourceID] = REQUIRED
+    _cluster: ResourceID = REQUIRED
     _pods: List[ResourceID] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
@@ -463,8 +509,8 @@ class ICluster(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IRequest(PersistentResource, ABC):
-    _fragment: Fragment
-    _status: Status
+    _fragment: Fragment = REQUIRED
+    _status: Status = REQUIRED
 
     def __post_init__(self):
         assert_type(self._fragment, dict)

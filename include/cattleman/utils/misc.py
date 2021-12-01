@@ -1,7 +1,9 @@
 import subprocess
 from datetime import datetime
-from typing import Union, Any, Tuple, Type, Iterable
+from inspect import isclass
+from typing import Union, Any, Type, Iterable, Optional
 
+import typing
 from dateutil import tz
 
 from cattleman.constants import UNDEFINED
@@ -90,8 +92,46 @@ def ask_confirmation(logger, message, default="y", question="Do you confirm?", c
                 return r
 
 
-def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool = False):
+def typing_type(type) -> type:
+    # noinspection PyProtectedMember,PyUnresolvedReferences
+    if isinstance(type, typing._GenericAlias):
+        return type.__dict__["__origin__"]
+    return type
+
+
+def typing_content_type(type) -> type:
+    # noinspection PyProtectedMember,PyUnresolvedReferences
+    if isinstance(type, typing._GenericAlias):
+        return type.__dict__["__args__"][0]
+    return type
+
+
+def assert_type(value: Any, klass: Union[Type, Iterable[Type]], nullable: bool = False,
+                field: Optional[str] = None):
     if value is None and nullable:
         return
-    if not isinstance(value, klass):
-        raise TypeMismatchException(klass, value)
+    # typing
+    # noinspection PyProtectedMember,PyUnresolvedReferences
+    if isinstance(klass, typing._GenericAlias):
+        print(klass)
+        print(value)
+        print(field)
+
+        container = klass.__dict__["__origin__"]
+        content = klass.__dict__["__args__"]
+
+        if container is typing.Union:
+            if type(None) in content and value is None:
+                return
+            for ctype in content:
+                if isclass(ctype) and isinstance(value, ctype):
+                    return
+            TypeMismatchException(klass, value, field=field)
+        if not isinstance(value, container):
+            raise TypeMismatchException(container, value, field=field)
+        if container in [list, set, tuple]:
+            for i, elem in enumerate(value):
+                assert_type(elem, content[0], field=f"{field}[{i}]")
+    else:
+        if not isinstance(value, klass):
+            raise TypeMismatchException(klass, value, field=field)

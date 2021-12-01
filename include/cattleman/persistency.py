@@ -30,8 +30,8 @@ class Database:
         self._lock = Semaphore()
         self._ensure_structure()
 
-    def get(self, table: str, id: Any):
-        return self.execute(f"SELECT * FROM {table} WHERE id=?;", str(id)).fetchone()
+    def get(self, table: str, id: str):
+        return self.execute(f"SELECT * FROM {table} WHERE id=?;", id).fetchone()
 
     def set(self, table: str, id: Any, data: bytes):
         # TODO: implement this

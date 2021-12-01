@@ -1,4 +1,4 @@
-from typing import Any, Union, Tuple
+from typing import Union, Tuple, Optional
 
 
 class CattlemanException(RuntimeError):
@@ -23,7 +23,8 @@ class DatabaseNotFoundException(CattlemanException):
 
 class TypeMismatchException(CattlemanException):
 
-    def __init__(self, expected: Union[str, type, Tuple[type]], received: object):
+    def __init__(self, expected: Union[str, type, Tuple[type]], received: object,
+                 field: Optional[str] = None):
         # sanitize expected
         if isinstance(expected, type):
             expected = expected.__name__
@@ -31,11 +32,15 @@ class TypeMismatchException(CattlemanException):
             expected = '|'.join(map(lambda k: k.__name__, expected))
         if not isinstance(expected, str):
             expected = type(expected).__name__
-        # sanitice received
+        # sanitize received
         if isinstance(received, type):
             received = received.__name__
         received = type(received).__name__
+        # extra info
+        extra = ""
+        if field is not None:
+            extra = f" for field '{field}'"
         # ---
-        msg = f"Expected type '{expected}', an object of type '{received}' was received instead."
+        msg = f"Expected type '{expected}'{extra}, " \
+              f"an object of type '{received}' was received instead."
         super(TypeMismatchException, self).__init__(msg)
-

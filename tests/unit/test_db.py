@@ -46,9 +46,11 @@ class TestDB(unittest.TestCase):
     def _load_db(num: int):
         return DB(TestDB._get_db_path(num))
 
+    @unittest.skip
     def test_make_empty(self):
         TestDB._make_empty()
 
+    @unittest.skip
     def test_load_empty(self):
         db_path = TestDB._get_db_path(0)
         load_configuration_from_database(db_path)
