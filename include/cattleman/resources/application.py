@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import cbor2
 
-from .basics import ResourceID, IApplication, Resource, ResourceType
+from ..types import ResourceID, IApplication, Resource, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -23,8 +23,8 @@ class Application(IApplication):
         return application
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'Application':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'Application':
+        data = cbor2.loads(value)
         return Application(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
         )

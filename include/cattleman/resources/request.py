@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import cbor2
 
-from .basics import ResourceID, IRequest, Resource, Fragment, ResourceType
+from ..types import ResourceID, IRequest, Resource, Fragment, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -25,9 +25,9 @@ class Request(IRequest):
         return request
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'Request':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'Request':
+        data = cbor2.loads(value)
         return Request(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
             _fragment=Fragment(data['_fragment']),
         )

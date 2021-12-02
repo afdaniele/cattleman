@@ -27,7 +27,7 @@ class Serializable(ABC):
 
     @classmethod
     @abstractmethod
-    def deserialize(cls, data) -> 'Serializable':
+    def deserialize(cls, value: Any, metadata: Optional[Dict] = None) -> 'Serializable':
         pass
 
 
@@ -124,8 +124,8 @@ class ResourceID(str, Serializable):
         return str(self)
 
     @classmethod
-    def deserialize(cls, data: str) -> 'ResourceID':
-        return ResourceID(data)
+    def deserialize(cls, value: str, metadata: Optional[Dict] = None) -> 'ResourceID':
+        return ResourceID(value)
 
 
 class Fragment(dict):
@@ -144,8 +144,8 @@ class ResourceStatus(Serializable):
         return copy.copy(self.__dict__)
 
     @classmethod
-    def deserialize(cls, data) -> 'ResourceStatus':
-        return ResourceStatus(**data)
+    def deserialize(cls, value: dict, metadata: Optional[Dict] = None) -> 'ResourceStatus':
+        return ResourceStatus(**value)
 
     @staticmethod
     def created() -> 'ResourceStatus':
@@ -160,7 +160,8 @@ class ResourceStatus(Serializable):
 
 @dataclasses.dataclass
 class Resource(Serializable, ABC):
-    id: ResourceID = make_field(ResourceID)
+    # TODO: do not serialize this
+    id: ResourceID = make_field(ResourceID, serialize=True)
     name: str = make_field(str)
     description: Optional[str] = make_field((str, NoneType))
     status: List[ResourceStatus] = make_field(list,
@@ -191,12 +192,16 @@ class Resource(Serializable, ABC):
                     assert_type(velem, vtype, field=f"{field}[{kelem}]")
 
     @staticmethod
-    def parse(data: dict) -> dict:
+    def parse(value: dict, metadata: dict) -> dict:
+        assert_type(metadata, dict, field="metadata")
+        if 'id' not in metadata:
+            raise KeyError(f"Missing ID in data loaded from database; Value: {value}")
+        # ---
         return {
-            "id": ResourceID.deserialize(data['id']),
-            "name": data['name'],
-            "description": data['description'],
-            "status": [ResourceStatus.deserialize(s) for s in data['status']],
+            "id": ResourceID.deserialize(metadata['id']),
+            "name": value['name'],
+            "description": value['description'],
+            "status": [ResourceStatus.deserialize(s) for s in value['status']],
         }
 
     @abstractmethod
@@ -261,7 +266,7 @@ class PersistentResource(Resource, ABC):
     def serialize(self) -> bytes:
         data = {}
         for field in dataclasses.fields(self):
-            if field.name.startswith("__"):
+            if not field.metadata['serialize']:
                 continue
             field_value = getattr(self, field.name)
             data[field.name] = self._serialize_value(field_value)
@@ -403,16 +408,16 @@ class IDNSRecord(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IPod(PersistentResource, ABC):
-    _node: ResourceID = make_field(ResourceID)
-    _application: ResourceID = make_field(ResourceID)
 
     @property
+    @abstractmethod
     def node(self) -> 'INode':
-        return KnowledgeBase.get(self._node)
+        pass
 
     @property
+    @abstractmethod
     def application(self) -> 'INode':
-        return KnowledgeBase.get(self._application)
+        pass
 
     def _sql_table(self) -> str:
         return "pods"
@@ -433,21 +438,21 @@ class IApplication(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class IService(PersistentResource, ABC):
-    _application: ResourceID = make_field(ResourceID)
-    _port: ResourceID = make_field(ResourceID)
-    _dns: ResourceID = make_field(ResourceID)
 
     @property
+    @abstractmethod
     def application(self) -> IApplication:
-        return KnowledgeBase.get(self._application)
+        pass
 
     @property
+    @abstractmethod
     def port(self) -> IPort:
-        return KnowledgeBase.get(self._port)
+        pass
 
     @property
+    @abstractmethod
     def dns(self) -> IDNSRecord:
-        return KnowledgeBase.get(self._dns)
+        pass
 
     def _sql_table(self) -> str:
         return "services"
@@ -458,25 +463,21 @@ class IService(PersistentResource, ABC):
 
 @dataclasses.dataclass
 class INode(PersistentResource, ABC):
-    _ip_addresses: List[ResourceID] = make_field(list, content=ResourceID)
-    _cluster: ResourceID = make_field(ResourceID)
-    _pods: List[ResourceID] = make_field(list, content=ResourceID, factory=list)
 
     @property
+    @abstractmethod
     def ip_addresses(self) -> List['IIPAddress']:
-        return [
-            KnowledgeBase.get(ip) for ip in self._ip_addresses
-        ]
+        pass
 
     @property
+    @abstractmethod
     def cluster(self) -> 'ICluster':
-        return KnowledgeBase.get(self._cluster)
+        pass
 
     @property
+    @abstractmethod
     def pods(self) -> List[IPod]:
-        return [
-            KnowledgeBase.get(p) for p in self._pods
-        ]
+        pass
 
     def _sql_table(self) -> str:
         return "nodes"

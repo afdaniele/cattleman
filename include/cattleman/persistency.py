@@ -50,6 +50,9 @@ class Database:
         # TODO: implement this
         pass
 
+    def fetchall(self, sql: str, *args) -> List[Row]:
+        return self.execute(sql, *args).fetchall()
+
     def execute(self, sql: str, *args):
         with AtomicSession():
             with self._lock:

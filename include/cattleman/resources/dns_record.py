@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import cbor2
 
-from .basics import ResourceID, IDNSRecord, Resource, DNSRecordType, ResourceType
+from ..types import ResourceID, IDNSRecord, Resource, DNSRecordType, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -30,10 +30,10 @@ class DNSRecord(IDNSRecord):
         return dns_record
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'DNSRecord':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'DNSRecord':
+        data = cbor2.loads(value)
         return DNSRecord(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
             _type=DNSRecordType(data['_type']),
             _value=data['_value'],
             _ttl=int(data['_ttl']),

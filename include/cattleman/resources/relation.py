@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any
 
 import cbor2
 
-from .basics import IRelation, Resource, ResourceID, RelationType, ResourceType
+from ..types import IRelation, Resource, ResourceID, RelationType, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -34,10 +34,10 @@ class Relation(IRelation):
         return relation
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'Relation':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'Relation':
+        data = cbor2.loads(value)
         return Relation(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
             _origin=ResourceID(data['_origin']),
             _relation=RelationType(data['_relation']),
             _destination=ResourceID(data['_destination']),

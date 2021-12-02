@@ -1,25 +1,21 @@
 import importlib
 import os
 import unittest
-from typing import Tuple, TypeVar, Type
+from typing import Type
 
 import cattleman
-from cattleman.types import Cluster, IPAddressType, IPAddress, Node, PersistentResource, \
-    TransportProtocol, DNSRecordType, Pod
 from cattleman.persistency import Persistency
-from cattleman.types.application import Application
-from cattleman.types.basics import Fragment
-from cattleman.types.dns_record import DNSRecord
-from cattleman.types.port import Port
-from cattleman.types.relation import Relation
-from cattleman.types.request import Request
-from cattleman.types.service import Service
+from cattleman.resources import Cluster, IPAddress, Node, Pod, Application, DNSRecord, Port, \
+    Request, Service
+from cattleman.types import Fragment, IPAddressType, PersistentResource, TransportProtocol, \
+    DNSRecordType
 
 os.environ.update({
     f"CATTLEMAN_RESOURCES_DB": ":memory:"
 })
 
 
+# noinspection DuplicatedCode
 class TestSerialization(unittest.TestCase):
 
     def setUp(self):
@@ -31,7 +27,7 @@ class TestSerialization(unittest.TestCase):
     def _loop(resource: PersistentResource, klass: Type[PersistentResource]) -> PersistentResource:
         db = Persistency.database("resources")
         row = db.get(resource._sql_table(), resource.id)
-        resource2 = klass.deserialize(row['value'])
+        resource2 = klass.deserialize(row['value'], dict(row))
         return resource2
 
     def test_serialize_cluster_empty(self):

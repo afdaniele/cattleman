@@ -72,6 +72,7 @@ setup(
         'sshconf',
         'ipaddress',
         'cryptography',
+        'semantic-version',
         *(['dataclasses'] if sys.version_info < (3, 7) else [])
     ],
     scripts=[

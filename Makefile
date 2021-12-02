@@ -49,7 +49,7 @@ test-distribution-3.6:
 
 test-one-unit:
 	@echo "Running unit tests:"; echo ""
-	@PYTHONPATH="${ROOT_DIR}:$${PYTHONPATH}" \
+	PYTHONPATH="${ROOT_DIR}/include:$${PYTHONPATH}" \
 		python3 \
 			-m unittest discover \
 			--verbose \

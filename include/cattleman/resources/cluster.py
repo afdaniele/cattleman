@@ -1,8 +1,8 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import cbor2
 
-from .basics import ICluster, ResourceID, Resource, ResourceStatus, Status, INode, ResourceType
+from ..types import ICluster, ResourceID, Resource, INode, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -26,8 +26,8 @@ class Cluster(ICluster):
         return cluster
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'Cluster':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'Cluster':
+        data = cbor2.loads(value)
         return Cluster(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
         )

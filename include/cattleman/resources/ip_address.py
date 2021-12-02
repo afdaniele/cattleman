@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import cbor2
 
-from .basics import ResourceID, IIPAddress, IPAddressType, Resource, ResourceType
+from ..types import ResourceID, IIPAddress, IPAddressType, Resource, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -28,10 +28,10 @@ class IPAddress(IIPAddress):
         return ip
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'IPAddress':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'IPAddress':
+        data = cbor2.loads(value)
         return IPAddress(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
             _value=data['_value'],
             _type=IPAddressType(data['_type']),
         )

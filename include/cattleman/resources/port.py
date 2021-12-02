@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import cbor2
 
-from .basics import ResourceID, IPort, Resource, TransportProtocol, ResourceType
+from ..types import ResourceID, IPort, Resource, TransportProtocol, ResourceType
 from ..utils.misc import assert_type
 
 
@@ -30,10 +30,10 @@ class Port(IPort):
         return port
 
     @classmethod
-    def deserialize(cls, data: bytes) -> 'Port':
-        data = cbor2.loads(data)
+    def deserialize(cls, value: bytes, metadata: Optional[Dict] = None) -> 'Port':
+        data = cbor2.loads(value)
         return Port(
-            **Resource.parse(data),
+            **Resource.parse(data, metadata),
             _internal=data['_internal'],
             _external=data['_external'],
             _protocol=TransportProtocol(data['_protocol']),

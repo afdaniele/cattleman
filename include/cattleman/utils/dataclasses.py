@@ -7,11 +7,13 @@ from cattleman.constants import UNDEFINED, NoneType
 def make_field(type: Union[type, Iterable[Union[type, NoneType]]],
                default: Any = UNDEFINED,
                content: Union[type, Iterable[Union[type, NoneType]]] = UNDEFINED,
-               factory: Any = UNDEFINED) -> dataclasses.Field:
+               factory: Any = UNDEFINED,
+               serialize: bool = True) -> dataclasses.Field:
     args = {
         'metadata': {
             'type': type,
-            'content': content
+            'content': content,
+            'serialize': serialize
         }
     }
     # default

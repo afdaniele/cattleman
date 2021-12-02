@@ -131,10 +131,11 @@ create table if not exists relations
     id TEXT not null
         constraint relations_pk
             primary key,
+    origin_type TEXT not null,
     origin TEXT not null,
     relation TEXT not null,
-    destination TEXT not null,
     destination_type TEXT not null,
+    destination TEXT not null,
     date TEXT not null,
     value BLOB not null
 );
