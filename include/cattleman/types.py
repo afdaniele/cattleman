@@ -160,8 +160,7 @@ class ResourceStatus(Serializable):
 
 @dataclasses.dataclass
 class Resource(Serializable, ABC):
-    # TODO: do not serialize this
-    id: ResourceID = make_field(ResourceID, serialize=True)
+    id: ResourceID = make_field(ResourceID, serialize=False)
     name: str = make_field(str)
     description: Optional[str] = make_field((str, NoneType))
     status: List[ResourceStatus] = make_field(list,
@@ -236,6 +235,7 @@ class PersistentResource(Resource, ABC):
         data = self.serialize()
         table = self._sql_table()
         with Persistency.session("resources") as cursor:
+            # TODO: move this to sqlite utils
             # TODO: this is only supported by SQLite 3.24+, ubuntu 18.04 runs SQLite 3.22
             query = f"INSERT INTO {table}(id, date, enabled, value) " \
                     f"VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET value = excluded.value;"
@@ -270,6 +270,7 @@ class PersistentResource(Resource, ABC):
                 continue
             field_value = getattr(self, field.name)
             data[field.name] = self._serialize_value(field_value)
+        print(cbor2.dumps(data))
         return cbor2.dumps(data)
 
     @abstractmethod
